@@ -12,7 +12,10 @@ import datetime
 import matplotlib.pyplot as plt
 import matplotlib
 import glob
-from audio_slicer import slice_audio_ui, load_raw_audio
+from ml_collections import ConfigDict
+from tools.smart_slicer.audio_slicer import slice_audio_ui, load_raw_audio
+from tools.SOME.infer import some_inference
+
 
 class Info:
     def __init__(self):
@@ -167,11 +170,28 @@ class EnhancedWebUI:
             
             with gr.Tab("🎤 音频推理"):
                 self.create_inference_tab()
+
+            with gr.Tab("歌声转MIDI"):
+                self.exp_midi()
             
             with gr.Tab("📊 监控面板"):
                 self.create_monitoring_tab()
         
         return ui
+    
+    def exp_midi(self):
+        with gr.Row():
+            some_input_audio = gr.Audio(label="上传音频", type="filepath")
+            with gr.Column():
+            	audio_bpm = gr.Number(label="输入音频BPM", value=120, interactive=True)
+            	some_output_folder = gr.Textbox(label="输出目录", value="results/mid", interactive=True, scale=3)
+        with gr.Row():
+            some_button = gr.Button("开始转换", variant="primary")
+            output_message_some = gr.Textbox(label="Output Message")
+        some_button.click(fn=some_inference, inputs=[some_input_audio, audio_bpm, some_output_folder], outputs=output_message_some)
+
+
+
     def audio_slicer(self):
         """智能音频切分UI界面"""
 
@@ -193,16 +213,6 @@ class EnhancedWebUI:
             )
             load_raw_audio_btn = gr.Button("🔍 加载原始音频", variant="primary")
 
-        # 添加音频格式选择
-        # with gr.Row():
-        #     audio_format = gr.Dropdown(
-        #         choices=[".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg"],
-        #         value=".wav",
-        #         label="🎵 音频格式",
-        #         info="选择要处理的音频文件格式",
-        #         scale=2
-        #     )
-        #     gr.HTML("<div style='flex: 2;'></div>")  # 占位符保持布局
         with gr.Row():
             
             load_raw_audio_output = gr.Textbox(

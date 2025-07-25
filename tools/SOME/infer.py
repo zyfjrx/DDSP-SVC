@@ -5,7 +5,20 @@ import os
 from tools.SOME import inference
 from tools.SOME.utils.infer_utils import build_midi_file
 from tools.SOME.utils.slicer2 import Slicer
+from logger.saver import Saver
 
+# 创建一个简单的logger类
+class SimpleLogger:
+    def info(self, msg):
+        print(f"[INFO] {msg}")
+    
+    def error(self, msg):
+        print(f"[ERROR] {msg}")
+
+logger = SimpleLogger()
+# pretrained SOME weight
+SOME_WEIGHT = "tools/SOME_weights/model_steps_64000_simplified.ckpt"
+SOME_CONFIG = "configs/config_some.yaml"
 
 def infer(model_path, config_path, wav_path, output_dir, tempo):
 	with open(config_path, "r", encoding="utf8") as f:
@@ -35,3 +48,19 @@ def infer(model_path, config_path, wav_path, output_dir, tempo):
 	midi_file.save(midi_path)
 
 	return midi_path
+
+def some_inference(audio_file, bpm, output_dir):
+	if not os.path.isfile(SOME_WEIGHT):
+		return ("请先下载SOME预处理模型并放置在tools/SOME_weights文件夹下! ")
+
+	os.makedirs(output_dir, exist_ok=True)
+
+	tempo = float(bpm)
+	try:
+		logger.info(f"Running SOME inference with audio file: {audio_file}, output dir: {output_dir}, tempo: {tempo}")
+		midi = infer(SOME_WEIGHT, SOME_CONFIG, audio_file, output_dir, tempo)
+		logger.info(f"SOME inference completed, MIDI file saved as: {midi}")
+		return ("处理完成, 文件已保存为: ") + midi
+	except Exception as e:
+		logger.error(f"Fail to run SOME inference. Error: {e}\n{traceback.format_exc()}")
+		return ("处理失败!") + str(e)
