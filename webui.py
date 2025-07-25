@@ -423,6 +423,7 @@ class EnhancedWebUI:
                 gr.Markdown("### 检查点设置")
                 interval_val = gr.Number(label="验证间隔(步数)", value=2000, precision=0, minimum=100)
                 interval_force_save = gr.Number(label="强制保存间隔(步数)", value=10000, precision=0, minimum=1000)
+                interval_log = gr.Number(label="日志打印间隔(步数)", value=1, precision=0, minimum=1)
         
         with gr.Row():
             start_btn = gr.Button("🚀 开始训练", variant="primary")
@@ -444,7 +445,7 @@ class EnhancedWebUI:
         # 绑定事件
         start_btn.click(
             fn=self.start_training,
-            inputs=[batch_size, learning_rate, total_epochs, interval_val, interval_force_save],
+            inputs=[batch_size, learning_rate, total_epochs, interval_val, interval_force_save, interval_log],
             outputs=[training_status, current_epoch, current_step]
         )
         
@@ -898,7 +899,7 @@ class EnhancedWebUI:
 
     # 训练相关方法
     def update_training_config(self, batch_size: int, learning_rate: float, total_epochs: int, 
-                            interval_val: int, interval_force_save: int) -> None:
+                            interval_val: int, interval_force_save: int, interval_log: int) -> None:
         """更新训练配置"""
         import yaml
         import datetime
@@ -921,6 +922,7 @@ class EnhancedWebUI:
         config['train']['epochs'] = total_epochs
         config['train']['interval_val'] = interval_val
         config['train']['interval_force_save'] = interval_force_save
+        config['train']['interval_log'] = interval_log
         config['env']['expdir'] = exp_dir
         
         # 创建输出目录
@@ -935,11 +937,11 @@ class EnhancedWebUI:
             print(f"保存配置文件失败: {e}")
 
     def start_training(self, batch_size: int, learning_rate: float, total_epochs: int,
-                      interval_val: int, interval_force_save: int):
+                      interval_val: int, interval_force_save: int, interval_log: int):
         """开始训练"""
         try:
             # 更新配置
-            self.update_training_config(batch_size, learning_rate, total_epochs, interval_val, interval_force_save)
+            self.update_training_config(batch_size, learning_rate, total_epochs, interval_val, interval_force_save, interval_log)
             
             # 启动训练
             command = ["python", "-m", "train_reflow", "-c", "configs/reflow.yaml"]

@@ -5,9 +5,9 @@ import subprocess
 import gradio as gr
 
 # 直接导入需要的模块
-from slicer.core.slicer import Slicer, get_rms
-from slicer.core.auto_slicer import AutoSlicer
-from slicer.utils.slicer_utils import slice_audio_directory, validate_audio_directory
+from smart_slicer.core.slicer import Slicer, get_rms
+from smart_slicer.core.auto_slicer import AutoSlicer
+from smart_slicer.utils.slicer_utils import slice_audio_directory, validate_audio_directory
 
 def check_and_install_dependencies():
     """检查并安装依赖"""
