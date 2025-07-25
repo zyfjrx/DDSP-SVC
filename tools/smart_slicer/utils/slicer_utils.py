@@ -2,7 +2,7 @@ import os
 import sys
 import librosa
 import shutil
-from smart_slicer.core.auto_slicer import AutoSlicer
+from tools.smart_slicer.core.auto_slicer import AutoSlicer
 
 
 def slice_audio_directory(input_dir, output_dir, process_method="丢弃", max_sec=15, min_sec=2, audio_format=".wav"):
