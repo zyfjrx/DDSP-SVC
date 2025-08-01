@@ -169,6 +169,9 @@ class EnhancedWebUI:
             gr.Markdown("# 🎵 DDSP-SVC WebUI")
             gr.Markdown("一个便于训练和推理的DDSP-SVC界面，支持数据预处理、模型训练和音频转换")
             
+            # 添加 MSST 音频分离标签页
+            with gr.Tab("🎼 音频分离 (MSST)"):
+                self.create_msst_tab()
 
             with gr.Tab("🔪 智能音频切分"):
                 self.audio_slicer()
@@ -186,8 +189,8 @@ class EnhancedWebUI:
                 self.exp_midi()
             
             # 添加 MSST 音频分离标签页
-            with gr.Tab("🎼 音频分离 (MSST)"):
-                self.create_msst_tab()
+            # with gr.Tab("🎼 音频分离 (MSST)"):
+            #     self.create_msst_tab()
             
             with gr.Tab("📊 监控面板"):
                 self.create_monitoring_tab()
@@ -1450,8 +1453,8 @@ class EnhancedWebUI:
                 
                 msst_output_folder = gr.Textbox(
                     label="输出文件夹",
-                    placeholder="例如: results/msst_output",
-                    value="results/msst_output"
+                    placeholder="例如: results/msst",
+                    value="results/msst"
                 )
             
             with gr.Column():
@@ -1471,7 +1474,7 @@ class EnhancedWebUI:
                 )
                 
                 with gr.Row():
-                    msst_refresh_btn = gr.Button("🔄 刷新模型列表", size="sm")
+                    msst_refresh_models_btn = gr.Button("🔄 刷新模型列表", size="sm")
                 
                 # 隐藏路径显示框，但保留变量供内部使用
                 msst_model_path = gr.Textbox(
@@ -1552,7 +1555,7 @@ class EnhancedWebUI:
         with gr.Row():
             msst_start_btn = gr.Button("🎵 开始分离", variant="primary")
             msst_stop_btn = gr.Button("⏹️ 停止分离", variant="stop")
-            msst_refresh_btn = gr.Button("🔄 刷新状态", variant="secondary")
+            msst_refresh_status_btn = gr.Button("🔄 刷新状态", variant="secondary")
         
         msst_status = gr.Textbox(
             label="分离状态",
@@ -1666,6 +1669,10 @@ class EnhancedWebUI:
             inputs=[msst_model_type, msst_model_name],
             outputs=[msst_model_path, msst_config_path, msst_target_instrument, msst_config_status]
         )
+        msst_refresh_status_btn.click(
+            fn=self.get_msst_status,
+            outputs=[msst_status]
+        )
         
         msst_model_name.change(
             fn=update_model_paths_and_config,
@@ -1680,7 +1687,7 @@ class EnhancedWebUI:
         )
         
         # 修复：刷新按钮只刷新模型列表，不触发配置更新
-        msst_refresh_btn.click(
+        msst_refresh_models_btn.click(
             fn=refresh_models_only,
             inputs=[msst_model_type],
             outputs=[msst_model_name]
@@ -1705,10 +1712,10 @@ class EnhancedWebUI:
             outputs=[msst_status]
         )
         
-        msst_refresh_btn.click(
-            fn=self.get_msst_status,
-            outputs=[msst_status]
-        )
+        # msst_refresh_btn.click(
+        #     fn=self.get_msst_status,
+        #     outputs=[msst_status]
+        # )
     
     def parse_config_file(self, config_path):
         """解析配置文件并提取training信息"""
@@ -1827,109 +1834,8 @@ class EnhancedWebUI:
             
         except Exception as e:
             return False, f"更新配置文件失败: {e}"
-    
-    def start_msst_separation(self, input_type, input_audio, input_folder, output_folder,
-                            model_type, model_path, config_path, device, output_format,
-                            use_tta, wav_bit_depth, flac_bit_depth, mp3_bit_rate, target_instrument):
-        """开始 MSST 音频分离"""
-        try:
-            # 验证输入
-            if input_type == "单个文件":
-                if not input_audio:
-                    return "❌ 请上传音频文件", 0, None
-                input_path = input_audio
-            else:
-                if not input_folder or not os.path.exists(input_folder):
-                    return "❌ 请提供有效的输入文件夹路径", 0, None
-                input_path = input_folder
-            
-            if not model_path or not os.path.exists(model_path):
-                return "❌ 请提供有效的模型文件路径", 0, None
-            
-            # 创建输出目录
-            os.makedirs(output_folder, exist_ok=True)
-            
-            # 设置音频参数
-            audio_params = {
-                "wav_bit_depth": wav_bit_depth,
-                "flac_bit_depth": flac_bit_depth,
-                "mp3_bit_rate": mp3_bit_rate
-            }
-            
-            # 创建分离器
-            logger = get_logger(console_level=logging.INFO)
-            if not config_path:
-                config_path = model_path.replace("pretrain", "configs") + ".yaml"
-            
-            self.msst_separator = MSSeparator(
-                model_type=model_type,
-                config_path=config_path,
-                model_path=model_path,
-                device=device,
-                output_format=output_format,
-                use_tta=use_tta,
-                store_dirs=output_folder,
-                audio_params=audio_params,
-                logger=logger
-            )
-            
-            self.msst_status = "正在分离"
-            
-            def run_separation():
-                try:
-                    if input_type == "单个文件":
-                        # 单文件处理
-                        import librosa
-                        import soundfile as sf
-                        
-                        self.msst_status = "📥 正在加载音频..."
-                        # 加载音频
-                        mix, sr = librosa.load(input_path, sr=44100, mono=False)
-                        
-                        self.msst_status = "🎵 正在分离音频..."
-                        # 执行分离
-                        results = self.msst_separator.separate(mix)
-                        
-                        self.msst_status = "💾 正在保存结果..."
-                        # 保存结果
-                        file_name = os.path.splitext(os.path.basename(input_path))[0]
-                        output_files = []
-                        
-                        for instr in results.keys():
-                            output_file = os.path.join(output_folder, f"{file_name}_{instr}.{output_format}")
-                            self.msst_separator.save_audio(results[instr], sr, f"{file_name}_{instr}", output_folder)
-                            output_files.append(output_file)
-                        
-                        self.msst_status = f"✅ 分离完成！输出文件: {', '.join([os.path.basename(f) for f in output_files])}"
-                        return output_files[0] if output_files else None
-                    else:
-                        # 文件夹批处理
-                        self.msst_status = "📁 正在批量处理文件夹..."
-                        success_files = self.msst_separator.process_folder(input_path)
-                        self.msst_status = f"✅ 批处理完成！成功处理 {len(success_files)} 个文件"
-                        return None
-                        
-                except Exception as e:
-                    self.msst_status = f"❌ 分离失败: {str(e)}"
-                    return None
-                finally:
-                    if hasattr(self, 'msst_separator'):
-                        self.msst_separator.del_cache()
-            
-            # 在线程中运行分离
-            def separation_thread():
-                result = run_separation()
-                return result
-            
-            thread = threading.Thread(target=separation_thread)
-            thread.daemon = True
-            thread.start()
-            
-            return "🚀 开始分离音频...", 50, None
-            
-        except Exception as e:
-            return f"❌ 启动分离失败: {str(e)}", 0, None
-    
+
+
     def stop_msst_separation(self):
         """停止 MSST 音频分离"""
         try:
@@ -2010,6 +1916,31 @@ class EnhancedWebUI:
             # 创建输出目录
             os.makedirs(output_folder, exist_ok=True)
             
+            # 构建store_dirs
+            if not config_path:
+                config_path = model_path.replace("pretrain", "configs") + ".yaml"
+            
+            # 加载配置文件获取instruments信息
+            from tools.msst.utils.merged_utils import load_configs
+            model_config = load_configs(config_path)
+            
+            # 构建store_dirs字典
+            if target_instrument and target_instrument.strip():
+                # 如果选择了target_instrument，只输出该乐器
+                store_dirs = {}
+                if target_instrument in model_config.training.get("instruments", []):
+                    store_dirs[target_instrument] = output_folder
+                else:
+                    yield f"❌ 选择的乐器 '{target_instrument}' 不在模型支持的乐器列表中", None
+                    return
+                
+                if not store_dirs:
+                    yield "❌ 未找到有效的目标乐器", None
+                    return
+            else:
+                # 如果未选择target_instrument，输出所有乐器
+                store_dirs = output_folder
+            
             # 设置音频参数
             audio_params = {
                 "wav_bit_depth": wav_bit_depth,
@@ -2023,8 +1954,6 @@ class EnhancedWebUI:
             
             # 创建分离器
             logger = get_logger(console_level=logging.INFO)
-            if not config_path:
-                config_path = model_path.replace("pretrain", "configs") + ".yaml"
             
             self.msst_separator = MSSeparator(
                 model_type=model_type,
@@ -2033,7 +1962,7 @@ class EnhancedWebUI:
                 device=device,
                 output_format=output_format,
                 use_tta=use_tta,
-                store_dirs=output_folder,
+                store_dirs=store_dirs,
                 audio_params=audio_params,
                 logger=logger
             )
