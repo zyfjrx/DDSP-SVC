@@ -18,7 +18,7 @@ data:
   volume_smooth_size: 1024
 device: cuda
 env:
-  expdir: exp/reflow-test/20250724_130441
+  expdir: exp/reflow-test/20250801_150455
   gpu_id: 0
 infer:
   infer_step: 50

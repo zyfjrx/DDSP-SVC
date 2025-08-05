@@ -1991,10 +1991,21 @@ class EnhancedWebUI:
                 file_name = os.path.splitext(os.path.basename(input_path))[0]
                 output_files = []
                 
-                for instr in results.keys():
-                    output_file = os.path.join(output_folder, f"{file_name}_{instr}.{output_format}")
-                    self.msst_separator.save_audio(results[instr], sr, f"{file_name}_{instr}", output_folder)
-                    output_files.append(output_file)
+                # 根据store_dirs字典决定保存哪些乐器
+                if isinstance(store_dirs, dict):
+                    # 如果store_dirs是字典，只保存字典中指定的乐器
+                    for instr in results.keys():
+                        if instr in store_dirs:
+                            output_dir = store_dirs[instr]
+                            output_file = os.path.join(output_dir, f"{file_name}_{instr}.{output_format}")
+                            self.msst_separator.save_audio(results[instr], sr, f"{file_name}_{instr}", output_dir)
+                            output_files.append(output_file)
+                else:
+                    # 如果store_dirs是字符串，保存所有乐器到该目录
+                    for instr in results.keys():
+                        output_file = os.path.join(store_dirs, f"{file_name}_{instr}.{output_format}")
+                        self.msst_separator.save_audio(results[instr], sr, f"{file_name}_{instr}", store_dirs)
+                        output_files.append(output_file)
                 
                 self.msst_status = f"✅ 分离完成！输出文件: {', '.join([os.path.basename(f) for f in output_files])}"
                 yield self.msst_status, output_files[0] if output_files else None
@@ -2022,7 +2033,7 @@ def main():
     app.queue()
     app.launch(
         server_name="0.0.0.0",
-        server_port=7861,
+        server_port=7865,
         share=True,
         inbrowser=False
     )
