@@ -8,3 +8,5 @@ exp/
 tools/SOME_weight/
 logs/
 run.log
+input/
+process_data/

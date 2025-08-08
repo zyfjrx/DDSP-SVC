@@ -43,6 +43,13 @@ def preprocess(path, f0_extractor, volume_extractor, mel_extractor, units_encode
     path_augmeldir  = os.path.join(path, 'aug_mel')
     path_skipdir = os.path.join(path, 'skip')
     
+    # 清理并重新创建特征目录
+    feature_dirs = [path_unitsdir, path_f0dir, path_volumedir, path_augvoldir, path_meldir, path_augmeldir, path_skipdir]
+    for feature_dir in feature_dirs:
+        if os.path.exists(feature_dir):
+            shutil.rmtree(feature_dir)
+        os.makedirs(feature_dir, exist_ok=True)
+    
     # list files
     filelist =  traverse_dir(
         path_srcdir,

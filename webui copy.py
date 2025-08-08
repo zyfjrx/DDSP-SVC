@@ -176,29 +176,20 @@ class EnhancedWebUI:
         
         return sorted(speakers) if speakers else []
     
-    def get_output_folder_by_model(self, model_name, speaker_name="", target_instrument=""):
-        """根据模型名称、说话人和目标乐器获取对应的输出文件夹路径"""
+    def get_output_folder_by_model(self, model_name, speaker_name=""):
+        """根据模型名称和说话人获取对应的输出文件夹路径"""
         if not model_name:
             return "process_data/msst"
             
         base_path = "process_data/msst"
         
-        # 优先使用目标乐器来确定子文件夹
-        if target_instrument:
-            if target_instrument == "noreverb":
-                subfolder = "noreverb"
-            elif target_instrument in ["vocals", "voice"]:
-                subfolder = "vocals"
-            else:
-                subfolder = target_instrument
+        if "big_beta5e" in model_name:
+            subfolder = "vocals"
+        elif "dereverb_mel_band_roformer_anvuew_sdr_19.1729" in model_name:
+            subfolder = "noreverb"
         else:
-            # 如果没有目标乐器，则根据模型名称判断
-            if "big_beta5e" in model_name:
-                subfolder = "vocals"
-            elif "dereverb_mel_band_roformer_anvuew_sdr_19.1729" in model_name:
-                subfolder = "noreverb"
-            else:
-                subfolder = "other"
+            # 默认情况
+            subfolder = "other"
         
         if speaker_name:
             return f"{base_path}/{subfolder}/{speaker_name}"
@@ -210,50 +201,6 @@ class EnhancedWebUI:
         if speaker_name:
             return f"process_data/raw/{speaker_name}"
         return "process_data/raw"
-    
-    def get_msst_directories(self):
-        """获取 process_data/msst 目录下的子目录结构"""
-        msst_base = "process_data/msst"
-        directories = []
-        
-        if not os.path.exists(msst_base):
-            return directories
-        
-        # 获取 vocals, noreverb 等子目录
-        for item in os.listdir(msst_base):
-            item_path = os.path.join(msst_base, item)
-            if os.path.isdir(item_path):
-                # 检查子目录下是否有说话人文件夹
-                speakers = []
-                for speaker in os.listdir(item_path):
-                    speaker_path = os.path.join(item_path, speaker)
-                    if os.path.isdir(speaker_path):
-                        speakers.append(speaker)
-                
-                if speakers:
-                    for speaker in sorted(speakers):
-                        directories.append(f"{item}/{speaker}")
-        
-        return sorted(directories)
-    
-    def get_msst_speaker_from_path(self, selected_path):
-        """从选择的路径中提取说话人名称"""
-        if "/" in selected_path:
-            return selected_path.split("/")[-1]
-        return ""
-    
-    def get_slicer_speakers(self):
-        """获取process_data/slicer目录下的说话人文件夹列表"""
-        slicer_dir = "process_data/slicer"
-        speakers = []
-        
-        if os.path.exists(slicer_dir):
-            for item in os.listdir(slicer_dir):
-                item_path = os.path.join(slicer_dir, item)
-                if os.path.isdir(item_path):
-                    speakers.append(item)
-        
-        return sorted(speakers) if speakers else []
     
     def create_interface(self):
         """创建 Gradio 界面"""
@@ -280,7 +227,9 @@ class EnhancedWebUI:
             with gr.Tab("歌声转MIDI"):
                 self.exp_midi()
             
-
+            # 添加 MSST 音频分离标签页
+            # with gr.Tab("🎼 音频分离 (MSST)"):
+            #     self.create_msst_tab()
             
             with gr.Tab("📊 监控面板"):
                 self.create_monitoring_tab()
@@ -291,8 +240,8 @@ class EnhancedWebUI:
         with gr.Row():
             some_input_audio = gr.Audio(label="上传音频", type="filepath")
             with gr.Column():
-                audio_bpm = gr.Number(label="输入音频BPM", value=120, interactive=True)
-                some_output_folder = gr.Textbox(label="输出目录", value="results/mid", interactive=True, scale=3)
+            	audio_bpm = gr.Number(label="输入音频BPM", value=120, interactive=True)
+            	some_output_folder = gr.Textbox(label="输出目录", value="results/mid", interactive=True, scale=3)
         with gr.Row():
             some_button = gr.Button("开始转换", variant="primary")
             output_message_some = gr.Textbox(label="Output Message")
@@ -307,55 +256,22 @@ class EnhancedWebUI:
         gr.HTML('<p style="text-align: center; color: #666;">基于静音检测的音频自动切片，支持批量处理</p>')
 
         with gr.Row():
-            # 添加音频源选择
-            audio_source_type = gr.Radio(
-                choices=["自定义路径", "MSST分离结果"],
-                value="自定义路径",
-                label="🎵 音频源类型",
-                info="请先选择音频来源类型",
-                scale=2
+            raw_audio_path = gr.Textbox(
+                label="原始音频文件夹",
+                placeholder="输入包含音频文件的目录路径",
+                value="input/",
+                scale=4
             )
-            
             audio_format = gr.Dropdown(
                 choices=[".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg"],
                 value=".wav",
                 label="🎵 音频格式",
                 scale=2
             )
-        
-        with gr.Row():
-            # 自定义路径输入组
-            with gr.Group(visible=True) as custom_path_group:
-                raw_audio_path = gr.Textbox(
-                    label="原始音频文件夹",
-                    placeholder="输入包含音频文件的目录路径",
-                    value="input/",
-                    scale=4
-                )
-            
-            # MSST 目录选择组
-            with gr.Group(visible=False) as msst_path_group:
-                with gr.Row():
-                    msst_directories = self.get_msst_directories()
-                    msst_directory_dropdown = gr.Dropdown(
-                        choices=msst_directories,
-                        value=msst_directories[0] if msst_directories else None,
-                        label="🎯 选择MSST分离结果",
-                        info="选择要切分的音频目录（格式：类型/说话人）",
-                        scale=4
-                    )
-                    # 添加刷新按钮
-                    refresh_msst_btn = gr.Button(
-                        "🔄", 
-                        size="sm", 
-                        variant="secondary",
-                        scale=1,
-                        min_width=50
-                    )
-            
             load_raw_audio_btn = gr.Button("🔍 加载原始音频", variant="primary")
 
         with gr.Row():
+            
             load_raw_audio_output = gr.Textbox(
                 label="📋 加载状态",
                 interactive=False,
@@ -368,6 +284,13 @@ class EnhancedWebUI:
                 max_lines=8,
                 placeholder="点击'加载原始音频'后显示文件列表"
             )
+        # with gr.Row():
+        #     slicer_output_dir = gr.Textbox(
+        #         label="输出目录",
+        #         placeholder="输入保存切片结果的目录路径（不要和输入目录相同）",
+        #         value="results/",
+        #         scale=4
+        #     )
 
         with gr.Row():
             with gr.Column():
@@ -378,7 +301,7 @@ class EnhancedWebUI:
                 )
                 slicer_output_dir = gr.Textbox(
                     label="输出目录",
-                    placeholder="输出目录将根据选择自动设置",
+                    placeholder="输入保存切片结果的目录路径（不要和输入目录相同）",
                     value="results/",
                     scale=4
                 )
@@ -402,80 +325,20 @@ class EnhancedWebUI:
             placeholder="点击'开始切片'后显示结果"
         )
 
-        # 音频源类型切换事件
-        def toggle_audio_source(source_type):
-            if source_type == "自定义路径":
-                return gr.Group(visible=True), gr.Group(visible=False)
-            else:
-                return gr.Group(visible=False), gr.Group(visible=True)
-        
-        audio_source_type.change(
-            fn=toggle_audio_source,
-            inputs=[audio_source_type],
-            outputs=[custom_path_group, msst_path_group]
-        )
-        
-        # 刷新MSST目录列表
-        def refresh_msst_directories():
-            directories = self.get_msst_directories()
-            return gr.Dropdown(choices=directories, value=directories[0] if directories else None)
-        
-        refresh_msst_btn.click(
-            fn=refresh_msst_directories,
-            outputs=[msst_directory_dropdown]
-        )
-        
-        # 获取实际的音频路径
-        def get_actual_audio_path(source_type, custom_path, msst_directory):
-            if source_type == "自定义路径":
-                return custom_path
-            else:
-                if msst_directory:
-                    return f"process_data/msst/{msst_directory}"
-                return "process_data/msst"
-        
-        # 更新输出目录
-        def update_output_directory(source_type, msst_directory):
-            if source_type == "MSST分离结果" and msst_directory:
-                speaker_name = self.get_msst_speaker_from_path(msst_directory)
-                if speaker_name:
-                    return f"process_data/slicer/{speaker_name}"
-            return "results/"
-        
-        # MSST目录选择变化时更新输出目录
-        msst_directory_dropdown.change(
-            fn=update_output_directory,
-            inputs=[audio_source_type, msst_directory_dropdown],
-            outputs=[slicer_output_dir]
-        )
-        
-        # 音频源类型变化时也更新输出目录
-        audio_source_type.change(
-            fn=update_output_directory,
-            inputs=[audio_source_type, msst_directory_dropdown],
-            outputs=[slicer_output_dir]
-        )
-
-        # 事件绑定 - 修改为支持两种音频源
-        def load_audio_with_source_check(source_type, custom_path, msst_directory, audio_format):
-            actual_path = get_actual_audio_path(source_type, custom_path, msst_directory)
-            return load_raw_audio(actual_path, audio_format)
-        
+        # 事件绑定 - 修改为传递音频格式参数
         load_raw_audio_btn.click(
-            fn=load_audio_with_source_check,
-            inputs=[audio_source_type, raw_audio_path, msst_directory_dropdown, audio_format],
+            fn=load_raw_audio,
+            inputs=[raw_audio_path, audio_format],
             outputs=[load_raw_audio_output, raw_audio_dataset]
         )
 
-        def slice_audio_with_source_check(source_type, custom_path, msst_directory, output_dir, process_method, max_sec, min_sec, audio_format):
-            actual_path = get_actual_audio_path(source_type, custom_path, msst_directory)
-            return slice_audio_ui(actual_path, output_dir, process_method, max_sec, min_sec, audio_format)
-        
         slicer_btn.click(
-            fn=slice_audio_with_source_check,
-            inputs=[audio_source_type, raw_audio_path, msst_directory_dropdown, slicer_output_dir, process_method, max_sec, min_sec, audio_format],
+            fn=slice_audio_ui,
+            inputs=[raw_audio_path, slicer_output_dir, process_method, max_sec, min_sec, audio_format],
             outputs=[slicer_output_msg]
         )
+
+        # ... existing code ...
     def create_preprocessing_tab(self):
         """数据预处理标签页"""
         gr.Markdown("## 🔄 数据预处理")
@@ -486,38 +349,17 @@ class EnhancedWebUI:
         with gr.Row():
             with gr.Column():
                 gr.Markdown("### 📁 数据源设置")
-                
-                # 说话人选择
-                with gr.Row():
-                    slicer_speakers = self.get_slicer_speakers()
-                    speaker_selection = gr.CheckboxGroup(
-                        choices=slicer_speakers,
-                        label="选择说话人",
-                        info="从process_data/slicer目录选择要处理的说话人",
-                        scale=4
-                    )
-                    refresh_speakers_btn = gr.Button(
-                        "🔄", 
-                        size="sm", 
-                        variant="secondary",
-                        scale=1,
-                        min_width=50
-                    )
-                
-                # 自动设置的数据目录显示
                 source_data_dir = gr.Textbox(
-                    label="数据源目录",
-                    value="process_data/slicer",
-                    interactive=False,
-                    info="根据选择的说话人自动设置"
+                    label="原始数据目录",
+                    placeholder="例如: /root/my_audio_data",
+                    info="包含所有原始音频文件的目录"
                 )
                 
                 model_type = gr.Radio(
                     choices=["single", "multi"],
                     value="single",
                     label="模型类型",
-                    info="根据选择的说话人数量自动设置",
-                    interactive=False
+                    info="single: 单人模型, multi: 多人模型"
                 )
                 
                 # 单人模型设置
@@ -535,9 +377,8 @@ class EnhancedWebUI:
                     speaker_mapping = gr.Textbox(
                         label="说话人映射",
                         placeholder='{"speaker1": 1, "speaker2": 2}',
-                        info="根据选择的说话人自动生成",
-                        lines=3,
-                        interactive=False
+                        info="JSON格式，将文件夹名映射到说话人ID",
+                        lines=3
                     )
                     multi_train_ratio = gr.Slider(
                         minimum=0.6, maximum=0.95, value=0.9, step=0.05,
@@ -591,77 +432,38 @@ class EnhancedWebUI:
                     interactive=False
                 )
         
-        # 刷新说话人列表
-        def refresh_speakers():
-            speakers = self.get_slicer_speakers()
-            return gr.CheckboxGroup(choices=speakers, value=[])
+        # 移除了预处理日志输出框
+        # preprocess_log = gr.Textbox(
+        #     label="预处理日志",
+        #     lines=12,
+        #     interactive=False,
+        #     autoscroll=True
+        # )
         
-        refresh_speakers_btn.click(
-            fn=refresh_speakers,
-            outputs=[speaker_selection]
+        # 模型类型切换事件
+        def toggle_speaker_groups(model_type):
+            if model_type == "single":
+                return gr.Group(visible=True), gr.Group(visible=False)
+            else:
+                return gr.Group(visible=False), gr.Group(visible=True)
+        
+        model_type.change(
+            fn=toggle_speaker_groups,
+            inputs=[model_type],
+            outputs=[single_speaker_group, multi_speaker_group]
         )
         
-        # 根据选择的说话人更新模型类型和映射
-        def update_model_settings(selected_speakers):
-            if not selected_speakers:
-                return (
-                    "single",
-                    gr.Group(visible=True),
-                    gr.Group(visible=False),
-                    ""
-                )
-            elif len(selected_speakers) == 1:
-                return (
-                    "single",
-                    gr.Group(visible=True),
-                    gr.Group(visible=False),
-                    ""
-                )
-            else:
-                # 生成说话人映射
-                mapping = {speaker: i+1 for i, speaker in enumerate(sorted(selected_speakers))}
-                mapping_str = json.dumps(mapping, ensure_ascii=False, indent=2)
-                return (
-                    "multi",
-                    gr.Group(visible=False),
-                    gr.Group(visible=True),
-                    mapping_str
-                )
-        
-        speaker_selection.change(
-            fn=update_model_settings,
-            inputs=[speaker_selection],
-            outputs=[model_type, single_speaker_group, multi_speaker_group, speaker_mapping]
-        )
-        
-        # 修改组织数据函数以支持选择的说话人
-        def organize_data_with_speakers(selected_speakers, model_type_val, train_ratio_val, multi_train_ratio_val, 
-                                      speaker_mapping_val, audio_format_val, target_sr_val, normalize_audio_val):
-            if not selected_speakers:
-                return "请先选择要处理的说话人", ""
-            
-            # 构建数据目录路径
-            if len(selected_speakers) == 1:
-                source_dir = f"process_data/slicer/{selected_speakers[0]}"
-            else:
-                source_dir = "process_data/slicer"
-            
-            return self.organize_data(
-                source_dir, model_type_val, train_ratio_val, multi_train_ratio_val,
-                speaker_mapping_val, audio_format_val, target_sr_val, normalize_audio_val
-            )
-        
-        # 绑定事件
+        # 绑定事件 - 移除了preprocess_log输出
         organize_btn.click(
-            fn=organize_data_with_speakers,
-            inputs=[speaker_selection, model_type, train_ratio, multi_train_ratio, 
+            fn=self.organize_data,
+            inputs=[source_data_dir, model_type, train_ratio, multi_train_ratio, 
                    speaker_mapping, audio_format, target_sr, normalize_audio],
-            outputs=[preprocess_status, data_summary]
+            outputs=[preprocess_status, data_summary]  # 移除了preprocess_log
         )
         
         preprocess_btn.click(
             fn=self.start_preprocessing_with_progress,
-            outputs=[preprocess_status, preprocess_progress],
+            outputs=[preprocess_status, preprocess_progress],  # 移除了preprocess_log
             show_progress=True
         )
         
@@ -1259,9 +1061,7 @@ class EnhancedWebUI:
                         if len(lines) > 500:
                             self.training_log_cache = '\n'.join(lines[-400:])
                             
-                except Exception as e:
-                    # 处理读取日志时的异常
-                    print(f"读取训练日志时出错: {e}")
+                except:
                     pass
                     
                 time.sleep(0.1)
@@ -1285,49 +1085,37 @@ class EnhancedWebUI:
             import re
             line_lower = line.lower()
             
-            # 检查是否是训练日志行（包含epoch、step、loss）
-            if 'epoch:' not in line_lower or 'step:' not in line_lower or 'loss:' not in line_lower:
-                return
+            # 解析epoch信息
+            epoch_match = re.search(r'epoch[:\s]*(\d+)', line_lower)
+            if epoch_match:
+                self.current_epoch = int(epoch_match.group(1))
             
-            # 解析step信息（先解析step，因为它是主键）
-            step_match = re.search(r'step[:\s]*([0-9]+)', line_lower)
-            if not step_match:
-                return
-            step_value = int(step_match.group(1))
+            # 解析step信息  
+            step_match = re.search(r'step[:\s]*(\d+)', line_lower)
+            if step_match:
+                self.current_step = int(step_match.group(1))
             
             # 解析loss信息
-            loss_match = re.search(r'loss[:\s]*([0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)', line_lower)
-            if not loss_match:
-                return
-            loss_value = float(loss_match.group(1))
+            loss_patterns = [
+                r'loss[:\s]*([0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)',
+                r'train.*loss[:\s]*([0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)',
+                r'total.*loss[:\s]*([0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)'
+            ]
             
-            # 解析epoch信息
-            epoch_match = re.search(r'epoch[:\s]*([0-9]+)', line_lower)
-            if epoch_match:
-                epoch_value = int(epoch_match.group(1))
-                self.current_epoch = epoch_value
-            
-            # 检查是否已经存在相同step的记录（使用更高效的方法）
-            existing_steps = {step for step, _ in self.loss_history}
-            
-            # 只有当step不存在时才添加
-            if step_value not in existing_steps:
-                self.loss_history.append((step_value, loss_value))
-                print(f"添加loss记录: step={step_value}, loss={loss_value}")
-                
-                # 限制历史记录长度
-                if len(self.loss_history) > 1000:
-                    self.loss_history = self.loss_history[-800:]
+            for pattern in loss_patterns:
+                loss_match = re.search(pattern, line_lower)
+                if loss_match:
+                    loss_value = float(loss_match.group(1))
+                    # 记录loss历史
+                    self.loss_history.append((self.current_step, loss_value))
                     
-                # 更新当前step（只有在成功添加记录时才更新）
-                self.current_step = step_value
-            else:
-                print(f"跳过重复的step: {step_value}")
+                    # 限制历史记录长度
+                    if len(self.loss_history) > 1000:
+                        self.loss_history = self.loss_history[-800:]
+                    break
                     
-        except Exception as e:
-            print(f"解析训练日志行时出错: {str(e)}, 行内容: {line}")
-            import traceback
-            traceback.print_exc()
+        except:
+            pass
 
     def stop_training(self) -> Tuple[str, str, str]:
         """停止训练"""
@@ -1409,57 +1197,6 @@ class EnhancedWebUI:
         except Exception as e:
             return f"🆘 强制停止时出错: {str(e)}", str(self.current_epoch), str(self.current_step)
 
-    def load_loss_from_log_file(self):
-        """从最新的日志文件中加载loss数据"""
-        try:
-            import re
-            import os
-            import glob
-            
-            # 动态查找最新的日志目录
-            exp_pattern = "/root/sft/DDSP-SVC/exp/reflow-test/*/log_info.txt"
-            log_files = glob.glob(exp_pattern)
-            
-            if not log_files:
-                print("未找到日志文件")
-                return
-            
-            # 获取最新的日志文件（按修改时间排序）
-            latest_log_file = max(log_files, key=os.path.getmtime)
-            print(f"正在读取日志文件: {latest_log_file}")
-            
-            # 清空现有的loss历史
-            self.loss_history = []
-            self.current_epoch = 0
-            self.current_step = 0
-            
-            # 读取并解析日志文件
-            with open(latest_log_file, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-            
-            print(f"日志文件共有 {len(lines)} 行")
-            
-            for i, line in enumerate(lines):
-                line = line.strip()
-                if not line:
-                    continue
-                
-                # 解析训练信息
-                old_loss_count = len(self.loss_history)
-                self._parse_training_line(line)
-                
-                # 调试信息：如果解析到新的loss，打印出来
-                if len(self.loss_history) > old_loss_count:
-                    print(f"第{i+1}行解析到loss: step={self.current_step}, loss={self.loss_history[-1][1]}, 行内容: {line}")
-            
-            print(f"从日志文件加载了 {len(self.loss_history)} 条loss记录")
-            print(f"当前epoch: {self.current_epoch}, 当前step: {self.current_step}")
-            
-        except Exception as e:
-            print(f"加载日志文件时出错: {str(e)}")
-            import traceback
-            traceback.print_exc()
-
     def create_loss_plot(self):
         """创建loss曲线图"""
         try:
@@ -1467,11 +1204,6 @@ class EnhancedWebUI:
             import matplotlib
             matplotlib.use('Agg')
             
-            # 如果没有loss历史数据，尝试从日志文件加载
-            if not hasattr(self, 'loss_history') or not self.loss_history:
-                self.load_loss_from_log_file()
-            
-            # 如果仍然没有数据，显示无数据信息
             if not hasattr(self, 'loss_history') or not self.loss_history:
                 fig, ax = plt.subplots(figsize=(10, 6))
                 ax.text(0.5, 0.5, 'No Loss Data\nPlease start training and refresh', 
@@ -1774,11 +1506,11 @@ class EnhancedWebUI:
                                 scale=3
                             )
                             msst_refresh_speakers_btn = gr.Button(
-                        "🔄 刷新", 
-                        size="sm",
-                        scale=1,
-                        variant="secondary"
-                    )
+                                "🔄 刷新", 
+                                size="sm",
+                                scale=1,
+                                variant="secondary"
+                            )
                         
                         msst_input_folder = gr.Textbox(
                             label="📂 输入文件夹路径",
@@ -1980,8 +1712,8 @@ class EnhancedWebUI:
                 # 解析配置文件
                 instruments, target_instrument = self.parse_config_file(config_path)
                 
-                # 根据模型名称、说话人和目标乐器自动设置输出文件夹
-                auto_output_folder = self.get_output_folder_by_model(model_name, speaker_name, target_instrument)
+                # 根据模型名称和说话人自动设置输出文件夹
+                auto_output_folder = self.get_output_folder_by_model(model_name, speaker_name)
                 
                 if instruments:
                     return (
@@ -2049,12 +1781,7 @@ class EnhancedWebUI:
         
         def update_output_folder_from_model_and_speaker(model_name, speaker_name):
             """根据模型和说话人更新输出文件夹路径"""
-            return self.get_output_folder_by_model(model_name or "", speaker_name or "", "")
-        
-        # 新增：根据目标乐器、模型和说话人更新输出文件夹
-        def update_output_folder_from_target_instrument(target_instrument, model_name, speaker_name):
-            """根据目标乐器、模型和说话人更新输出文件夹路径"""
-            return self.get_output_folder_by_model(model_name or "", speaker_name or "", target_instrument or "")
+            return self.get_output_folder_by_model(model_name or "", speaker_name or "")
         
         def refresh_speaker_list():
             """刷新说话人列表"""
@@ -2102,16 +1829,16 @@ class EnhancedWebUI:
             fn=update_model_paths_and_config,
             inputs=[msst_model_type, msst_model_name, msst_speaker_dropdown],
             outputs=[msst_model_path, msst_config_path, msst_target_instrument, msst_config_status, msst_output_folder]
+        ).then(
+            fn=update_output_folder_from_model_and_speaker,
+            inputs=[msst_model_name, msst_speaker_dropdown],
+            outputs=[msst_output_folder]
         )
         
         msst_target_instrument.change(
             fn=update_target_instrument,
             inputs=[msst_config_path, msst_target_instrument],
             outputs=[msst_config_status]
-        ).then(
-            fn=update_output_folder_from_target_instrument,
-            inputs=[msst_target_instrument, msst_model_name, msst_speaker_dropdown],
-            outputs=[msst_output_folder]
         )
         
         # 修复：刷新按钮只刷新模型列表，不触发配置更新

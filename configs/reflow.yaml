@@ -18,7 +18,7 @@ data:
   volume_smooth_size: 1024
 device: cuda
 env:
-  expdir: exp/reflow-test/20250801_150455
+  expdir: exp/reflow-test/20250808_152932
   gpu_id: 0
 infer:
   infer_step: 50
@@ -37,7 +37,7 @@ model:
   win_length: 2048
 train:
   amp_dtype: fp16
-  batch_size: 256
+  batch_size: 512
   cache_all_data: true
   cache_device: cpu
   cache_fp16: true
@@ -45,7 +45,7 @@ train:
   epochs: 100000
   gamma: 0.9
   interval_force_save: 10000
-  interval_log: 1
+  interval_log: 50
   interval_val: 2000
   lambda_ddsp: 1
   lr: 0.0005
