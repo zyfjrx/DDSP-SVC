@@ -10,3 +10,4 @@ logs/
 run.log
 input/
 process_data/
+*.log
